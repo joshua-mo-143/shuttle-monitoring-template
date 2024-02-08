@@ -34,14 +34,48 @@
 		{% endmatch %}
 	{% endfor %}
 	</div>
+	<div>
+	Last 30 days:
+	{% for timestamp in monthly_data %}
+		{% match timestamp.uptime_pct %}
+		     {% when Some with (100) %}
+		     <div class="tooltip">
+			     🟢
+			     <span class="tooltiptext">{{timestamp.time}}
+
+				     Uptime: {{timestamp.uptime_pct.unwrap()}}%</span>
+		     </div>
+		     {% when None %}
+		     <div class="tooltip">
+		     ⚪
+			     <span class="tooltiptext">{{timestamp.time}}
+
+			     No data here :(</span>
+		     </div>
+		     {% else %}
+		     <div class="tooltip">
+		     🔴
+
+			     <span class="tooltiptext">{{timestamp.time}}
+
+				     Uptime: {{timestamp.uptime_pct.unwrap()}}%</span>
+		     </div>
+
+		{% endmatch %}
+	{% endfor %}
+	</div>
 </div>
 
 <div class="incident-list">
 	<h2>Incidents</h2> 
+{% if incidents.len() > 0 %}
 {% for incident in incidents %}
 <div class="incident">
 	{{incident.time}} - {{incident.status}}
 </div>
 {% endfor %}
+{% else %}
+No incidents reported. 
+{% endif %}
 </div>
 {% endblock %}
