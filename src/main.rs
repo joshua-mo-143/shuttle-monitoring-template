@@ -7,24 +7,47 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use chrono::Timelike;
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tokio::time::{sleep, Duration};
+use tokio::time::{self, Duration};
 use validator::Validate;
 
-async fn get_websites(State(state): State<AppState>) -> impl AskamaIntoResponse {
+enum ApiError {
+    SQLError(sqlx::Error),
+}
+
+impl From<sqlx::Error> for ApiError {
+    fn from(e: sqlx::Error) -> Self {
+        Self::SQLError(e)
+    }
+}
+
+impl AxumIntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::SQLError(e) => {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR, 
+                    format!("SQL Error: {e}")
+                    ).into_response()
+            }
+        }
+    }
+}
+
+async fn get_websites(State(state): State<AppState>) -> Result<impl AskamaIntoResponse, ApiError> {
     let websites = sqlx::query_as::<_, Website>("SELECT url, alias FROM websites")
         .fetch_all(&state.db)
-        .await
-        .unwrap();
+        .await?;
 
     let mut logs = Vec::new();
 
     for website in websites {
-        let data = get_website_uptime_stats(SplitBy::Hour, &website.alias, &state.db).await;
+        let data = get_daily_stats(&website.alias, &state.db).await?;
 
         logs.push(WebsiteInfo {
             url: website.url,
@@ -33,101 +56,117 @@ async fn get_websites(State(state): State<AppState>) -> impl AskamaIntoResponse 
         });
     }
 
-    WebsiteLogs { logs }
+    Ok(WebsiteLogs { logs })
 }
 
-enum SplitBy {
-    Hour,
-    Day
-}
-
-async fn get_website_uptime_stats(split_by: SplitBy, alias: &str, db: &PgPool) -> Vec<WebsiteStats> {
-        let mut data = match split_by {
-           SplitBy::Hour => sqlx::query_as::<_, WebsiteStats>(
-            r#"
+async fn get_daily_stats(alias: &str, db: &PgPool) -> Result<Vec<WebsiteStats>, ApiError> {
+    let data = sqlx::query_as::<_, WebsiteStats>(
+        r#"
             SELECT date_trunc('hour', created_at) as time, 
             CAST(COUNT(case when status = 200 then 1 end) * 100 / COUNT(*) AS int2) as uptime_pct 
-            FROM logs WHERE website_alias = $1 
+            FROM logs 
+            LEFT JOIN websites on websites.id = logs.website_id
+            WHERE websites.alias = $1 
             group by time
             order by time asc
             limit 24
             "#,
-        )
-        .bind(alias)
-        .fetch_all(db)
-        .await
-        .unwrap(),
-            SplitBy::Day => sqlx::query_as::<_, WebsiteStats>(
-            r#"
+    )
+    .bind(alias)
+    .fetch_all(db)
+    .await?;
+
+    let number_of_splits = 24;
+    let number_of_seconds = 3600;
+
+    let data = fill_data_gaps(data, number_of_splits, SplitBy::Hour, number_of_seconds);
+
+    Ok(data)
+}
+
+async fn get_monthly_stats(alias: &str, db: &PgPool) -> Result<Vec<WebsiteStats>, ApiError> {
+    let data = sqlx::query_as::<_, WebsiteStats>(
+        r#"
             SELECT date_trunc('day', created_at) as time, 
             CAST(COUNT(case when status = 200 then 1 end) * 100 / COUNT(*) AS int2) as uptime_pct 
-            FROM logs WHERE website_alias = $1 
+            FROM logs 
+            LEFT JOIN websites on websites.id = logs.website_id
+            WHERE websites.alias = $1 
             group by time
             order by time asc
             limit 30
             "#,
-        )
-        .bind(alias)
-        .fetch_all(db)
-        .await
-        .unwrap()
-        };
+    )
+    .bind(alias)
+    .fetch_all(db)
+    .await?;
 
-        let number_of_splits = match split_by {
-            SplitBy::Hour => 24,
-            SplitBy::Day => 30
-        };
+    let number_of_splits = 30;
+    let number_of_seconds = 86400;
 
-        let date_format = match split_by {
-            SplitBy::Hour => "%Y/%m/%d %H:00:00.000 %z",
-            SplitBy::Day => "%Y/%m/%d 00:00:00.000 %z"
-        };
+    let data = fill_data_gaps(data, number_of_splits, SplitBy::Day, number_of_seconds);
+    Ok(data)
+}
 
-        let number_of_seconds = match split_by {
-            SplitBy::Hour => 3600,
-            SplitBy::Day => 86400,
-        };
+enum SplitBy {
+    Hour,
+    Day,
+}
 
-        if data.len() < number_of_splits {
-            for i in 1..number_of_splits {
-                let created_at = Utc::now().format(date_format).to_string();
-                let created_at = DateTime::parse_from_str(&created_at, "%Y/%m/%d %H:%M:%S%.3f %z")
-                    .unwrap()
-                    - chrono::Duration::seconds((number_of_seconds * i).try_into().unwrap());
+fn fill_data_gaps(
+    mut data: Vec<WebsiteStats>,
+    splits: i32,
+    format: SplitBy,
+    number_of_seconds: i32,
+) -> Vec<WebsiteStats> {
+    if (data.len() as i32) < splits {
+        for i in 1..24 {
+            let time = Utc::now() - chrono::Duration::seconds((number_of_seconds * i).into());
+            let time = time
+                .with_minute(0)
+                .unwrap()
+                .with_second(0)
+                .unwrap()
+                .with_nanosecond(0)
+                .unwrap();
 
-                if !data.iter().any(|x| x.time == created_at) {
-                    data.push(WebsiteStats {
-                        time: created_at.into(),
-                        uptime_pct: None,
-                    });
-                }
+            let time = if matches!(format, SplitBy::Day) {
+                time.with_hour(0).unwrap()
+            } else {
+                time
+            };
+
+            if !data.iter().any(|x| x.time == time) {
+                data.push(WebsiteStats {
+                    time,
+                    uptime_pct: None,
+                });
             }
-            data.sort_by(|a, b| b.time.cmp(&a.time));
         }
+        data.sort_by(|a, b| b.time.cmp(&a.time));
+    }
+
     data
 }
 
 async fn get_website_by_alias(
     State(state): State<AppState>,
     Path(alias): Path<String>,
-) -> impl AskamaIntoResponse {
+) -> Result<impl AskamaIntoResponse, ApiError> {
     let website = sqlx::query_as::<_, Website>("SELECT url, alias FROM websites WHERE alias = $1")
         .bind(&alias)
         .fetch_one(&state.db)
-        .await
-        .unwrap();
+        .await?;
 
-    let last_24_hours_data = get_website_uptime_stats(SplitBy::Hour, &website.alias, &state.db).await;
-    let monthly_data = get_website_uptime_stats(SplitBy::Day, &website.alias, &state.db).await;
-
+    let last_24_hours_data = get_daily_stats(&website.alias, &state.db).await?;
+    let monthly_data = get_monthly_stats(&website.alias, &state.db).await?;
 
     let incidents = sqlx::query_as::<_, Incident>(
-        "SELECT created_at as time, status from logs where website_alias = $1 and status != 200",
+        "SELECT logs.created_at as time, logs.status from logs left join websites on websites.id = logs.website_id where websites.alias = $1 and logs.status != 200",
     )
     .bind(&alias)
     .fetch_all(&state.db)
-    .await
-    .unwrap();
+    .await?;
 
     let log = WebsiteInfo {
         url: website.url,
@@ -135,7 +174,11 @@ async fn get_website_by_alias(
         data: last_24_hours_data,
     };
 
-    SingleWebsiteLogs { log, incidents, monthly_data }
+    Ok(SingleWebsiteLogs {
+        log,
+        incidents,
+        monthly_data,
+    })
 }
 
 async fn styles() -> impl AxumIntoResponse {
@@ -170,28 +213,25 @@ async fn create_website(
 async fn delete_website(
     State(state): State<AppState>,
     Path(alias): Path<String>,
-) -> Result<impl AxumIntoResponse, impl AxumIntoResponse> {
+) -> Result<impl AxumIntoResponse, ApiError> {
+    let mut tx = state.db.begin().await?;
     if let Err(e) = sqlx::query("DELETE FROM logs WHERE website_alias = $1")
         .bind(&alias)
-        .execute(&state.db)
-        .await
-    {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Could not execute SQL query: {e}"),
-        ));
-    }
+        .execute(&mut *tx)
+        .await {
+            tx.rollback().await?;
+            return Err(ApiError::SQLError(e));
+        };
 
     if let Err(e) = sqlx::query("DELETE FROM websites WHERE alias = $1")
         .bind(&alias)
-        .execute(&state.db)
-        .await
-    {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Could not execute SQL query: {e}"),
-        ));
-    }
+        .execute(&mut *tx)
+        .await {
+            tx.rollback().await?;
+            return Err(ApiError::SQLError(e));
+        }
+
+    tx.commit().await?;
 
     Ok(StatusCode::OK)
 }
@@ -214,7 +254,7 @@ struct WebsiteLogs {
 struct SingleWebsiteLogs {
     log: WebsiteInfo,
     incidents: Vec<Incident>,
-    monthly_data: Vec<WebsiteStats>
+    monthly_data: Vec<WebsiteStats>,
 }
 
 #[derive(sqlx::FromRow, Serialize)]
@@ -272,7 +312,10 @@ async fn main(#[shuttle_shared_db::Postgres] db: PgPool) -> shuttle_axum::Shuttl
 }
 
 async fn check_websites(db: PgPool) {
+    let mut interval = time::interval(Duration::from_secs(60));
     loop {
+        interval.tick().await;
+
         let ctx = Client::new();
 
         let mut res = sqlx::query_as::<_, Website>("SELECT url, alias FROM websites").fetch(&db);
@@ -283,9 +326,9 @@ async fn check_websites(db: PgPool) {
             let response = ctx.get(website.url).send().await.unwrap();
 
             sqlx::query(
-                "INSERT INTO logs (website_alias, status)
+                "INSERT INTO logs (website_id, status)
                         VALUES
-                        ($1, $2)",
+                        ((SELECT id FROM websites where alias = $1), $2)",
             )
             .bind(website.alias)
             .bind(response.status().as_u16() as i16)
@@ -293,16 +336,5 @@ async fn check_websites(db: PgPool) {
             .await
             .unwrap();
         }
-
-        // We want to request each website once a minute - we add 2 seconds to avoid accidentally
-        // requesting in the same minute
-        // The default stored value in Postgres is truncated to the minute 
-        let next_time = Utc::now().format("%Y/%m/%d %H:%M:02.000 %z").to_string();
-        let next_time = DateTime::parse_from_str(&next_time, "%Y/%m/%d %H:%M:%S%.3f %z").unwrap()
-            + chrono::Duration::seconds(60);
-
-        let duration_to_wait = next_time.signed_duration_since(Utc::now()).num_seconds() as u64;
-
-        sleep(Duration::from_secs(duration_to_wait)).await;
     }
 }

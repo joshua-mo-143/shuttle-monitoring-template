@@ -7,8 +7,8 @@ create table if not exists websites (
 
 create table if not exists logs (
     id serial primary key,
-    website_alias varchar(75) not null references websites(alias),
+    website_id int not null references websites(id),
     status smallint,
     created_at timestamp with time zone not null default date_trunc('minute', current_timestamp),
-    UNIQUE (website_alias, created_at) 
+    UNIQUE (website_id, created_at) 
 );

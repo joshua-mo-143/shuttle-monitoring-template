@@ -2,9 +2,9 @@ html {
     box-sizing: border-box;
     margin: 0px;
     padding: 0;
-    background-color: #FCA17D;
+    background-color: #fca17d;
     min-height: 100vh;
-    font-family: 'Roboto', sans-serif;
+    font-family: "Roboto", sans-serif;
 }
 
 h1 {
@@ -25,7 +25,8 @@ h1 {
     align-items: center;
 }
 
-.website-list, .incident-list {
+.website-list,
+.incident-list {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -38,45 +39,46 @@ h1 {
     width: 40%;
     display: flex;
     flex-direction: column;
-    gap: .5rem;
+    gap: 0.5rem;
     background-color: rgba(255, 255, 255, 0.3);
     border-radius: 2rem;
     align-self: center;
-    box-shadow: 5px 5px 5px rgba(0,0,0,0.1);
+    box-shadow: 5px 5px 5px rgba(0, 0, 0, 0.1);
 }
 
 .tooltip {
-  position: relative;
-  display: inline-block;
+    position: relative;
+    display: inline-block;
 }
 
 .tooltip .tooltiptext {
-  visibility: hidden;
-  width: 200px;
-  font-size: 0.9rem;
-  bottom: 100%;
-  left: 50%;
-  margin-left: -60px;
-  background-color: black;
-  color: #fff;
-  text-align: center;
-  border-radius: 6px;
-  padding: 5px 0;
+    visibility: hidden;
+    width: 200px;
+    font-size: 0.9rem;
+    bottom: 100%;
+    left: 50%;
+    margin-left: -60px;
+    background-color: black;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
 
-  /* Position the tooltip */
-  position: absolute;
-  z-index: 1;
+    /* Position the tooltip */
+    position: absolute;
+    z-index: 1;
 }
 
 .tooltip:hover .tooltiptext {
-  visibility: visible;
+    visibility: visible;
 }
 
-button, .view-button {
+button,
+.view-button {
     text-decoration: none;
-    padding: .5rem 1rem;
+    padding: 0.5rem 1rem;
     border-radius: 2rem;
-    box-shadow: 0px 8px 1px rgba(0,0,0,0.3);
+    box-shadow: 0px 8px 1px rgba(0, 0, 0, 0.3);
     border: none;
     transition: 0.3s ease-out;
     color: black;
@@ -84,24 +86,24 @@ button, .view-button {
 
 .delete-button {
     background-color: rgba(255, 0, 0, 0.5);
-    box-shadow: 0px 8px 1px rgba(255,0,0,0.3);
+    box-shadow: 0px 8px 1px rgba(255, 0, 0, 0.3);
 }
 
 .delete-button:hover {
     transform: translateY(5px);
-    box-shadow: 0px 3px 1px rgba(255,0,0,0.3);
+    box-shadow: 0px 3px 1px rgba(255, 0, 0, 0.3);
 }
 
 .submit-button {
     background-color: rgba(0, 255, 0, 0.5);
-    box-shadow: 0px 8px 1px rgba(0,255,0,0.3);
+    box-shadow: 0px 8px 1px rgba(0, 255, 0, 0.3);
 }
 
 .submit-button:hover {
     transform: translateY(5px);
-    box-shadow: 0px 3px 1px rgba(0,255,0,0.3);
+    box-shadow: 0px 3px 1px rgba(0, 255, 0, 0.3);
 }
-    
+
 .view-button {
     background-color: cyan;
     display: inline-block;
@@ -109,12 +111,12 @@ button, .view-button {
 
 .view-button:hover {
     transform: translateY(5px);
-    box-shadow: 0px 3px 1px rgba(0,0,0,0.3);
+    box-shadow: 0px 3px 1px rgba(0, 0, 0, 0.3);
 }
 
 button:hover {
     transform: translateY(5px);
-    box-shadow: 0px 3px 1px rgba(0,0,0,0.3);
+    box-shadow: 0px 3px 1px rgba(0, 0, 0, 0.3);
 }
 
 form {
@@ -129,7 +131,7 @@ form > button {
 }
 input {
     border: none;
-    padding: .5rem 1rem;
+    padding: 0.5rem 1rem;
     border-radius: 2rem;
-    box-shadow: 0px 5px 1px rgba(0,0,0,0.1);
+    box-shadow: 0px 5px 1px rgba(0, 0, 0, 0.1);
 }
