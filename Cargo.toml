@@ -1,0 +1,20 @@
+[package]
+name = "monitor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+askama = { version = "0.12.1", features = ["with-axum"] }
+askama_axum = "0.4.0"
+axum = "0.7.3"
+chrono = { version = "0.4.33", features = ["clock", "serde"] }
+futures-util = "0.3.30"
+reqwest = "0.11.24"
+serde = { version = "1.0.196", features = ["derive"] }
+shuttle-axum = "0.38.0"
+shuttle-runtime = "0.38.0"
+shuttle-shared-db = { version = "0.38.0", features = ["postgres", "sqlx"] }
+sqlx = { version = "0.7.3", features = ["runtime-tokio-rustls", "postgres", "macros", "chrono"] }
+tokio = { version = "1.28.2", features = ["time"] }
+tracing = "0.1.40"
+validator = { version = "0.16.1", features = ["derive"] }

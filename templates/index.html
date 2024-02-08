@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Shuttle Status Monitor</h1>
+<form action="/websites" method="POST">
+     <input name="url" placeholder="url" required></input>
+     <input name="alias" placeholder="alias" required></input>
+     <button class="submit-button" type="submit">Submit</button>
+</form>
+<div class="website-list">
+{% for log in logs %}
+<div class="website">
+	<h2 class="website-name">{{log.alias}} - {{log.url}}</h2>
+	<div>
+	Last 24  hours:
+	{% for timestamp in log.data %}
+		{% match timestamp.uptime_pct %}
+		     {% when Some with (100) %}
+		     <div class="tooltip">
+			     🟢
+			     <span class="tooltiptext">{{timestamp.time}}
+
+				     Uptime: {{timestamp.uptime_pct.unwrap()}}%</span>
+		     </div>
+		     {% when None %}
+		     <div class="tooltip">
+		     ⚪
+			     <span class="tooltiptext">{{timestamp.time}}
+
+			     No data here :(</span>
+		     </div>
+		     {% else %}
+		     <div class="tooltip">
+		     🔴
+
+			     <span class="tooltiptext">{{timestamp.time}}
+
+				     Uptime: {{timestamp.uptime_pct.unwrap()}}%</span>
+		     </div>
+
+		{% endmatch %}
+	{% endfor %}
+	</div>
+	<div>
+		<a href="/websites/{{log.alias}}" class="view-button">View</a>
+		<button hx-delete="/websites/{{log.alias}}" 
+			class="delete-button" 
+			hx-confirm="Are you sure you want to stop tracking this website?" 
+			hx-target="closest .menu" 
+			hx-swap="outerHTML">Delete</button>
+	</div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}
