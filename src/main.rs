@@ -215,13 +215,20 @@ async fn delete_website(
     Path(alias): Path<String>,
 ) -> Result<impl AxumIntoResponse, ApiError> {
     let mut tx = state.db.begin().await?;
-    if let Err(e) = sqlx::query("DELETE FROM logs WHERE website_alias = $1")
-        .bind(&alias)
-        .execute(&mut *tx)
-        .await {
-            tx.rollback().await?;
-            return Err(ApiError::SQLError(e));
-        };
+    if let Err(e) = sqlx::query(
+        "DELETE FROM Logs WHERE id IN
+        (SELECT Logs.id
+        FROM Logs
+        LEFT JOIN Websites ON Websites.id = Logs.website_id
+        WHERE Websites.alias = $1)",
+    )
+    .bind(&alias)
+    .execute(&mut *tx)
+    .await
+    {
+        tx.rollback().await?;
+        return Err(ApiError::SQLError(e));
+    };
 
     if let Err(e) = sqlx::query("DELETE FROM websites WHERE alias = $1")
         .bind(&alias)
